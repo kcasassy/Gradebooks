@@ -1,0 +1,117 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Class Gradebook</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 2rem;
+            max-width: 620px;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-top: .5rem;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+        }
+
+        fieldset {
+            margin-bottom: 1rem;
+        }
+
+        .msg {
+            color: #555;
+            min-height: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Class Gradebook</h1>
+    <fieldset>
+        <legend>Register / Login</legend>
+        <input id="user" placeholder="username" />
+        <input id="pass" type="password" placeholder="password" />
+        <button onclick="register()">Register</button>
+        <button onclick="login()">Login</button>
+        <button onclick="logout()">Logout</button>
+        <p id="authMsg" class="msg"></p>
+    </fieldset>
+    <fieldset>
+        <legend>Any logged-in user</legend>
+        <button onclick="myGrades()">View my grades</button>
+    </fieldset>
+    <fieldset>
+        <legend>Instructor only</legend>
+        <button onclick="allGrades()">View ALL grades</button><br /><br />
+        <input id="gStudent" placeholder="student" />
+        <input id="gSubject" placeholder="subject" />
+        <input id="gScore" type="number" placeholder="score" />
+        <button onclick="postGrade()">Post grade</button>
+    </fieldset>
+    <table>
+        <thead><tr><th>Student</th><th>Subject</th><th>Score</th></tr></thead>
+        <tbody id="rows"></tbody>
+    </table>
+    <p id="gradeMsg" class="msg"></p>
+    <script>const BASE = "https://localhost:7273";
+    // attaches the token and surfaces 401 / 403 in one place
+    async function authFetch(url, options = {}) {
+      const token = localStorage.getItem("token");
+      options.headers = options.headers || {};
+      if (token) options.headers["Authorization"] = "Bearer " + token;
+      const res = await fetch(url, options);
+      if (res.status === 401) msg("401 — please log in first.");
+      if (res.status === 403) msg("403 — you are not allowed to do that.");
+      return res;
+    }
+    function msg(t) { document.getElementById("gradeMsg").textContent = t; }
+    function auth(t) { document.getElementById("authMsg").textContent = t; }
+    const body = () => JSON.stringify({
+      username: document.getElementById("user").value,
+      password: document.getElementById("pass").value
+    });
+    async function register() {
+      const res = await fetch(BASE + "/api/auth/register",
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: body() });
+      auth(res.ok ? "Registered — now log in." : "Register failed (" + res.status + ")");
+    }
+    async function login() {
+      const res = await fetch(BASE + "/api/auth/login",
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: body() });
+      if (!res.ok) { auth("Login failed."); return; }
+      const data = await res.json();
+      localStorage.setItem("token", data.token);
+      auth("Logged in as " + document.getElementById("user").value + " ✓");
+    }
+    function logout() { localStorage.removeItem("token"); auth("Logged out."); render([]); }
+    function render(list) {
+      document.getElementById("rows").innerHTML =
+        list.map(g => "<tr><td>" + g.studentUsername + "</td><td>" +
+                      g.subject + "</td><td>" + g.score + "</td></tr>").join("");
+    }
+    async function myGrades() {
+      const res = await authFetch(BASE + "/api/grades/me");
+      if (res.ok) { render(await res.json()); msg("Your grades."); }
+    }
+    async function allGrades() {
+      const res = await authFetch(BASE + "/api/grades");
+      if (res.ok) { render(await res.json()); msg("All grades (instructor view)."); }
+    }
+    async function postGrade() {
+      const res = await authFetch(BASE + "/api/grades", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentUsername: document.getElementById("gStudent").value,
+          subject: document.getElementById("gSubject").value,
+          score: Number(document.getElementById("gScore").value)
+        })
+      });
+      if (res.ok) { msg("Grade posted ✓"); allGrades(); }
+    }</script>
+</body>
+</html>
